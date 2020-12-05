@@ -23,3 +23,5 @@ cabal.project.local~
 .ghc.environment.*
 day-*/dist
 day-*/dist-*
+day-*/target
+day-*/Cargo.lock
