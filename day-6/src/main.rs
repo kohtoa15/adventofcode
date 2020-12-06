@@ -3,14 +3,10 @@ use std::thread::{JoinHandle};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-#[cfg(debug_assertions)]
-const LOGGING: bool = true;
-#[cfg(not(debug_assertions))]
-const LOGGING: bool = false;
-
 macro_rules! log {
     ($($arg:tt)*) => {
-        if LOGGING {
+        #[cfg(debug_assertions)]
+        {
             print!("# ");
             println!($($arg)*);
         }
