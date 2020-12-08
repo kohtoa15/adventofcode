@@ -225,7 +225,10 @@ fn main() {
         if n == 0 { break; }
         match parse_instruction(buffer.as_str()) {
             Ok(instr) => instructions.push(instr),
-            Err(e) => panic!("Error occurred on line {}: {}", line_cnt, e),
+            Err(e) => {
+                println!("Error occurred on line {}: {}", line_cnt, e);
+                return;
+            },
         };
         line_cnt += 1;
     }
