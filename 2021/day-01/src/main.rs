@@ -1,4 +1,4 @@
-use std::{error::Error, collections::BTreeMap, iter::Map};
+use std::{collections::BTreeMap, error::Error, iter::Map};
 
 use tokio::io::BufReader;
 
@@ -49,11 +49,11 @@ async fn main() {
         increase_counter
     );
 
-
     // Calculate increases between measurement windows
     let mut sum_increase_counter: u32 = 0;
     // last 2 must be discarded (not finished)
-    let sums: Vec<(String, u32)> = msrmt_windows.get_sums()
+    let sums: Vec<(String, u32)> = msrmt_windows
+        .get_sums()
         .into_iter()
         .take(msrmt_windows.len() - 2)
         .collect();
@@ -67,7 +67,10 @@ async fn main() {
         }
         last_val = Some(sum);
     }
-    println!("2) How many sums are larger than the previous sum?\n --> Answer: {}", sum_increase_counter);
+    println!(
+        "2) How many sums are larger than the previous sum?\n --> Answer: {}",
+        sum_increase_counter
+    );
 }
 
 /// Returns the indices of the windows this measurement is part of
@@ -97,8 +100,9 @@ impl MeasurementWindow {
     }
 
     pub fn get_sums(&self) -> Vec<(String, u32)> {
-        self.inner.iter()
-            .map(|(k,v)| {
+        self.inner
+            .iter()
+            .map(|(k, v)| {
                 let ident = key_to_identifier(k);
                 let sum: u32 = v.iter().sum();
                 (ident, sum)
@@ -113,7 +117,9 @@ impl MeasurementWindow {
 
 impl Default for MeasurementWindow {
     fn default() -> Self {
-        MeasurementWindow { inner: BTreeMap::new() }
+        MeasurementWindow {
+            inner: BTreeMap::new(),
+        }
     }
 }
 
@@ -129,7 +135,9 @@ fn key_to_identifier(key: &u32) -> String {
         assert!(chr >= 65 && chr <= 90);
         ident.push(char::from_u32(chr).unwrap());
         // Disable first_run after initial use
-        if first_run { first_run = false; }
+        if first_run {
+            first_run = false;
+        }
     }
     return ident;
 }
