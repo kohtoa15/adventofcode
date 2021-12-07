@@ -1,0 +1,10 @@
+[package]
+name = "day-03"
+version = "0.1.0"
+authors = ["Tobias Kohlmaier <tobias.kohlmaier@bearingpoint.com>"]
+edition = "2021"
+
+[dependencies]
+bitfield = "0.13"
+itertools = "*"
+tokio = { version = "1", features = ["full"]}
