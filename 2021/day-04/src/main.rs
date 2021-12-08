@@ -278,16 +278,6 @@ impl BingoBoard {
                 return self.has_finished;
             }
         }
-        /* Note: diagonals DON'T count
-        // Check 2 diagonals
-        let rows = 0..5;
-        let cols = 0..5;
-        if rows.clone().zip(cols.clone()).all(|(row, col)| self.number_drawn(row, col)) ||
-            rows.zip(cols.rev()).all(|(row, col)| self.number_drawn(row, col)) {
-                self.has_finished = true;
-                return self.has_finished;
-        }
-        */
         // No full rows/cols found -> not won yet
         return false;
     }
