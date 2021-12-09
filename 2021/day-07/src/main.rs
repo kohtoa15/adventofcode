@@ -1,3 +1,5 @@
+#![feature(fn_traits)]
+
 macro_rules! debug_log {
     ($($arg:tt)*) => {
         #[cfg(debug_assertions)]
@@ -29,6 +31,8 @@ async fn main() {
             crabs.push(u32::from_str_radix(k, 10).expect("Could not parse input"));
         }
     }
+    // Wrap crab position vec into concurrent smart pointer
+    let crabs = Arc::new(crabs);
 
     {
         #[cfg(debug_assertions)]
@@ -40,7 +44,7 @@ async fn main() {
         let min = crabs.iter().min().map(|x| *x).unwrap_or_default();
         let max = crabs.iter().max().map(|x| *x).unwrap_or_default();
         for target in min..max {
-            let hdl = spawn_aligment_task(target, &crabs, &target_board);
+            let hdl = spawn_aligment_task(target, &crabs, &target_board, ||);
             handles.push(hdl);
         }
 
@@ -66,7 +70,7 @@ async fn main() {
         let min = crabs.iter().min().map(|x| *x).unwrap_or_default();
         let max = crabs.iter().max().map(|x| *x).unwrap_or_default();
         for target in min..max {
-            let hdl = spawn_aligment_task_triangular(target, &crabs, &target_board);
+            let hdl = spawn_aligment_task(target, &crabs, &target_board, triangular_number);
             handles.push(hdl);
         }
 
@@ -105,23 +109,9 @@ impl SharedTargetBoard {
     }
 }
 
-fn spawn_aligment_task(target: u32, crabs: &Vec<u32>, target_board: &SharedTargetBoard) -> JoinHandle<()> {
-    let pos = crabs.clone();
-    let res = target_board.clone();
-    tokio::spawn(async move {
-        #[cfg(debug_assertions)]
-        let start =  Instant::now();
-        // calc diffs to target
-        let fuel_cost: u32 = pos.iter()
-            .map(|pos| target.max(*pos) - target.min(*pos))
-            .sum();
-        res.post_result(target, fuel_cost);
-        debug_log!("task with target {} has finished. (result = {}) -- took {}µs", target, fuel_cost, start.elapsed().as_micros());
-    })
-}
-
-
-fn spawn_aligment_task_triangular(target: u32, crabs: &Vec<u32>, target_board: &SharedTargetBoard) -> JoinHandle<()> {
+fn spawn_aligment_task<F>(target: u32, crabs: &Arc<Vec<u32>>, target_board: &SharedTargetBoard, closure: F) -> JoinHandle<()>
+    where F: Fn(u32) -> u32 + Send + 'static
+{
     let pos = crabs.clone();
     let res = target_board.clone();
     tokio::spawn(async move {
@@ -131,7 +121,7 @@ fn spawn_aligment_task_triangular(target: u32, crabs: &Vec<u32>, target_board: &
         let fuel_cost: u32 = pos.iter()
             .map(|pos| {
                 let n = target.max(*pos) - target.min(*pos);
-                triangular_number(n)
+                closure.call((n,))
             })
             .sum();
         res.post_result(target, fuel_cost);
