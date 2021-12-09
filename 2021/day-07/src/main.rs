@@ -9,9 +9,12 @@ macro_rules! debug_log {
     };
 }
 
-use std::{collections::HashMap, sync::{Arc, Mutex}};
 #[cfg(debug_assertions)]
 use std::time::Instant;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use tokio::{io::BufReader, task::JoinHandle};
 
@@ -24,9 +27,7 @@ async fn main() {
     let mut crabs = Vec::new();
 
     while let Some(line) = lines.next_line().await.expect("IO error") {
-        let s: Vec<&str> = line.trim()
-            .split(",")
-            .collect();
+        let s: Vec<&str> = line.trim().split(",").collect();
         for k in s {
             crabs.push(u32::from_str_radix(k, 10).expect("Could not parse input"));
         }
@@ -44,7 +45,7 @@ async fn main() {
         let min = crabs.iter().min().map(|x| *x).unwrap_or_default();
         let max = crabs.iter().max().map(|x| *x).unwrap_or_default();
         for target in min..max {
-            let hdl = spawn_aligment_task(target, &crabs, &target_board, ||);
+            let hdl = spawn_aligment_task(target, &crabs, &target_board, |x| x);
             handles.push(hdl);
         }
 
@@ -85,7 +86,6 @@ async fn main() {
             target_board.get_cheapest(),
         );
     }
-
 }
 
 #[derive(Clone, Default)]
@@ -101,31 +101,44 @@ impl SharedTargetBoard {
     /// Locks the results tab and returns the smallest fuel cost value
     pub fn get_cheapest(&self) -> u32 {
         let fuel_costs = self.fuel_results.lock().unwrap();
-        let (_, cost) = fuel_costs.iter()
-            .min_by(|(_,v), (_,other)| v.cmp(other))
-            .map(|(k,v)| (*k,*v))
+        let (_, cost) = fuel_costs
+            .iter()
+            .min_by(|(_, v), (_, other)| v.cmp(other))
+            .map(|(k, v)| (*k, *v))
             .unwrap_or_default();
         cost
     }
 }
 
-fn spawn_aligment_task<F>(target: u32, crabs: &Arc<Vec<u32>>, target_board: &SharedTargetBoard, closure: F) -> JoinHandle<()>
-    where F: Fn(u32) -> u32 + Send + 'static
+fn spawn_aligment_task<F>(
+    target: u32,
+    crabs: &Arc<Vec<u32>>,
+    target_board: &SharedTargetBoard,
+    closure: F,
+) -> JoinHandle<()>
+where
+    F: Fn(u32) -> u32 + Send + 'static,
 {
     let pos = crabs.clone();
     let res = target_board.clone();
     tokio::spawn(async move {
         #[cfg(debug_assertions)]
-        let start =  Instant::now();
+        let start = Instant::now();
         // calc diffs to target
-        let fuel_cost: u32 = pos.iter()
+        let fuel_cost: u32 = pos
+            .iter()
             .map(|pos| {
                 let n = target.max(*pos) - target.min(*pos);
                 closure.call((n,))
             })
             .sum();
         res.post_result(target, fuel_cost);
-        debug_log!("task with target {} has finished. (result = {}) -- took {}µs", target, fuel_cost, start.elapsed().as_micros());
+        debug_log!(
+            "task with target {} has finished. (result = {}) -- took {}µs",
+            target,
+            fuel_cost,
+            start.elapsed().as_micros()
+        );
     })
 }
 
