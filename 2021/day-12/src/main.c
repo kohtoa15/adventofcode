@@ -4,13 +4,7 @@
 
 #include "gpath.h"
 #include "fsio.h"
-
-// Set to 1 to get debug output
-#define DEBUG 0
-#define debug_trace(fmt, ...) \
-  do { if (DEBUG) fprintf(stderr, "%s:%d:%s(): " fmt, __FILE__, __LINE__, __func__, __VA_ARGS__); } while(0);
-#define debug_print(fmt, ...) \
-  do { if (DEBUG) fprintf(stderr, fmt, __VA_ARGS__); } while(0);
+#include "debug.h"
 
 size_t read_path(struct Graph* g, size_t offset, char* stream) {
   // read next line
@@ -90,39 +84,41 @@ int main(int argc, char** argv) {
     // printf("offset: %lu\n", offset);
   }
 
-  // debug: print nodes and edges
-  printf("* Nodes: (%d)\n", g.nodes_num);
-  for (int i = 0; i < g.nodes_num; i++) {
-    struct GraphNode* node = g.nodes[i];
-    char* name;
-    if (node != NULL) {
-      name = node->name;
-    } else {
-      name = "<null>";
+  if (DEBUG) {
+    // debug: print nodes and edges
+    printf("* Nodes: (%d)\n", g.nodes_num);
+    for (int i = 0; i < g.nodes_num; i++) {
+      struct GraphNode* node = g.nodes[i];
+      char* name;
+      if (node != NULL) {
+        name = node->name;
+      } else {
+        name = "<null>";
+      }
+      printf("  '%s'\n", name);
     }
-    printf("  '%s'\n", name);
-  }
-  printf("* Edges: (%d)\n", g.edges_num);
-  for (int i = 0; i < g.edges_num; i++) {
-    struct GraphEdge* edge = g.edges[i];
-    if (edge != NULL) {
-      char* first;
-      if (edge->node_a != NULL) {
-        first = edge->node_a->name;
-      } else {
-        first = "<null>";
-      }
+    printf("* Edges: (%d)\n", g.edges_num);
+    for (int i = 0; i < g.edges_num; i++) {
+      struct GraphEdge* edge = g.edges[i];
+      if (edge != NULL) {
+        char* first;
+        if (edge->node_a != NULL) {
+          first = edge->node_a->name;
+        } else {
+          first = "<null>";
+        }
 
-      char* second;
-      if (edge->node_b != NULL) {
-        second = edge->node_b->name;
-      } else {
-        second = "<null>";
-      }
+        char* second;
+        if (edge->node_b != NULL) {
+          second = edge->node_b->name;
+        } else {
+          second = "<null>";
+        }
 
-      printf("  '%s' - '%s'\n", first, second);
-    } else {
-      printf("  <null>\n");
+        printf("  '%s' - '%s'\n", first, second);
+      } else {
+        printf("  <null>\n");
+      }
     }
   }
   
@@ -138,7 +134,7 @@ int main(int argc, char** argv) {
     return -1;
   }
   
-  struct SubPaths paths = path_from_to(start, end);
+  struct SubPaths paths = path_from_to(start, end, 1);
   // print all possible paths
   if (DEBUG) {
     printf("\nAll posible paths:\n");
@@ -148,6 +144,41 @@ int main(int argc, char** argv) {
     }
   }
   printf("\n1. there are %d possible paths from start to end.\n", paths.len);
+  // del paths data
+  for (int i = 0; i < paths.len; i++) {
+    struct NodePath* path = paths.paths[i];
+    free(path->nodes);
+    path->len = 0;
+    path->cap = 0;
+    free(path);
+  }
+  free(paths.paths);
+  paths.len = 0;
+  paths.cap = 0;
+
+
+  // Run again with max_vists = 1
+  struct SubPaths paths2 = path_from_to(start, end, 2);
+  // print all possible paths
+  if (DEBUG) {
+    printf("\nAll posible paths:\n");
+    for (int i = 0; i < paths2.len; i++) {
+      struct NodePath* path = paths2.paths[i];
+      path_print(path);
+    }
+  }
+  printf("\n2. there are %d possible paths from start to end.\n", paths2.len);
+  // del paths2 data
+  for (int i = 0; i < paths2.len; i++) {
+    struct NodePath* path = paths2.paths[i];
+    free(path->nodes);
+    path->len = 0;
+    path->cap = 0;
+    free(path);
+  }
+  free(paths2.paths);
+  paths2.len = 0;
+  paths2.cap = 0;
 
   return 0;
 }

@@ -31,8 +31,8 @@ struct SubPaths{
   int cap;
 };
 
-struct SubPaths create_subpaths(struct NodePath* path);
+struct SubPaths create_subpaths(struct NodePath* path, int max_visits, bool skip_start);
 
 struct SubPaths merge_subpaths(struct SubPaths dest, struct SubPaths src);
 
-struct SubPaths path_from_to(struct GraphNode* start, struct GraphNode* end);
+struct SubPaths path_from_to(struct GraphNode* start, struct GraphNode* end, int max_visits);
