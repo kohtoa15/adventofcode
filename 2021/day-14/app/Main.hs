@@ -1,4 +1,7 @@
 module Main where
+import Data.Hashable (Hashable)
+import Data.HashMap.Strict (HashMap)
+import Data.HashMap.Strict as HM (empty, elems, adjust, fromList, toList, insert, lookup, insertWith, keys)
 import Data.List (sort, nub)
 import Data.List.Split (splitOn)
 import Data.Maybe (isJust, fromJust)
@@ -83,6 +86,91 @@ elementQuantities p = (e, count) : elementQuantities rest
 extremeQuantities :: Polymer -> (Int, Int)
 extremeQuantities p = (head qs, last qs)
   where qs = sort $ map snd $ elementQuantities $ sort p
+
+-- Mapping of known polymer patterns
+data PatternSubSet = List [(Polymer, Polymer)] | Map (HashMap Polymer Polymer) deriving (Show)
+type PatternSet = HashMap Int PatternSubSet
+type PolymerInfo = (Polymer, PatternSet)
+
+newSubSet :: Polymer -> Polymer -> PatternSubSet
+newSubSet k v
+    | length k > 1048576 = List [(k,v)]    -- avoid hashing large keys, when most likely we don't have many of the same size
+    | otherwise       = Map (HM.insert k v HM.empty)
+
+mergeSubSets :: PatternSubSet -> PatternSubSet -> PatternSubSet
+mergeSubSets (List l1) (List l2) = List (l1 ++ l2)
+mergeSubSets (List l) (Map m) = List (l ++ HM.toList m)
+mergeSubSets (Map m) (List l) = List (l ++ HM.toList m)
+mergeSubSets (Map m1) (Map m2) = Map (HM.insert k (fromJust $ HM.lookup k m1) m2)  -- we know that m1 can't be greater than length of 1
+  where k = head $ HM.keys m1
+
+patternInsert :: Polymer -> Polymer -> PatternSet -> PatternSet
+patternInsert k v = HM.insertWith mergeSubSets l (newSubSet k v)
+  where l = length k
+
+subsetListLookup :: Polymer -> [(Polymer, Polymer)] -> Maybe Polymer
+subsetListLookup p [] = Nothing
+subsetListLookup p ((k,v):xs)
+    | p == k    = Just v
+    | otherwise = subsetListLookup p xs
+
+subsetLookup :: Polymer -> PatternSubSet -> Maybe Polymer
+subsetLookup p (Map m) = HM.lookup p m
+subsetLookup p (List l) = subsetListLookup p l
+
+patternLookup :: Polymer -> PatternSet -> Maybe Polymer
+patternLookup k s = subsetLookup k =<< HM.lookup (length k) s
+
+patternsFromRules :: [PairRule] -> PatternSet
+patternsFromRules [] = HM.empty
+patternsFromRules (r:rs) = patternInsert key val (patternsFromRules rs)
+  where key = [a, b] -- start pattern is the two pair chars
+        val = [a, c, b]  -- resulting pattern is with the resulting char in the middle
+        a = fst $ fst r
+        b = snd $ fst r
+        c = snd r
+
+polymerInfo :: (Polymer, [PairRule]) -> PolymerInfo
+polymerInfo (p,r) = (p, patternsFromRules r)
+
+-- tries to apply the patterns to the polymer and returns the result without updating the patterns
+applyPatternSet :: Polymer -> PatternSet -> Polymer
+applyPatternSet p pat
+    | isJust result = fromJust result
+    | otherwise     = p
+  where result = patternLookup p pat
+
+-- split polymer and progress with separate halves
+splitPolymer :: PolymerInfo -> PolymerInfo
+splitPolymer (p, pat) = (grownPolymer, patterns)
+  where halves = splitAt (div (length p) 2) p
+        insert = tail $ init $ applyPatternSet [last $ fst halves, head $ snd halves] pat
+        grownFstHalf = growPolymer (fst halves, pat)
+        grownSndHalf = growPolymer (snd halves, snd grownFstHalf)  -- use updated patterns
+        grownPolymer = fst grownFstHalf ++ insert ++ fst grownSndHalf
+        patterns = patternInsert p grownPolymer (snd grownSndHalf) -- add current whole as pattern
+
+-- check options for undiscovered polymer
+growUndiscovered :: PolymerInfo -> PolymerInfo
+growUndiscovered (p, pat)
+    | length p > 2 = splitPolymer (p, pat)   -- split if we have at least 3 elements
+    | otherwise    = (p,pat)  -- on 2 elements, possible growths should already have been in patterns
+
+-- check all polymer growth interactions and return updated polymer and patterns
+growPolymer :: PolymerInfo -> PolymerInfo
+growPolymer ([],pat) = ([], pat)
+growPolymer ([x],pat) = ([x], pat)
+growPolymer (p,pat)
+    | isJust val = (fromJust val, pat)   -- if we know the pattern, just return it
+    | otherwise  = growUndiscovered (p,pat) -- otherwise, split along the middle and search again
+  where val = patternLookup p pat
+
+growRepeatedly :: PolymerInfo -> Int -> PolymerInfo
+growRepeatedly p 0 = p
+growRepeatedly p x = growRepeatedly (growPolymer p) (x - 1)
+
+solveHelperPat :: Int -> (Polymer, [PairRule]) -> PolymerInfo
+solveHelperPat i (p, r) = growRepeatedly (p, patternsFromRules r) i
 
 
 -- Solve Results
