@@ -23,36 +23,6 @@ readPairRule s
         b = last ab
         c = last parts
 
-
--- Polymer insertion logic
-checkInsertRule :: (Element, Element) -> PairRule -> Maybe Element
-checkInsertRule (a, b) rule
-    | a == fst pair && b == snd pair = Just (snd rule)
-    | otherwise = Nothing
-  where pair = fst rule
-
-applyInsertRules :: (Element, Element) -> [PairRule] -> Maybe Element
-applyInsertRules (a,b) [] = Nothing
-applyInsertRules (a,b) (r:rest)
-    | isJust check = check
-    | otherwise    = applyInsertRules (a,b) rest
-  where check = checkInsertRule (a,b) r
-
-applyInsertRulesToAll :: Polymer -> [PairRule] -> Polymer
-applyInsertRulesToAll [] _ = []
-applyInsertRulesToAll [a] _ = [a]
-applyInsertRulesToAll (a:b:rest) r
-    | isJust insert = [a] ++ [fromJust insert] ++ rest_polymer
-    | otherwise     = a : rest_polymer
-  where insert = applyInsertRules (a,b) r
-        rest_polymer = applyInsertRulesToAll (b:rest) r
-
-runPolymerSteps :: Int -> Polymer -> [PairRule] -> Polymer
-runPolymerSteps 0 p _ = p
-runPolymerSteps x p r = runPolymerSteps (x-1) next r
-  where next = applyInsertRulesToAll p r
-
-
 -- Read Input helpers
 readInputLines :: [String] -> Maybe (Polymer, [PairRule])
 readInputLines ls
@@ -67,7 +37,7 @@ readInput :: String -> Maybe (Polymer, [PairRule])
 readInput s = readInputLines $ lines s
 
 
--- Polymer progression functions
+-- Polymer counting functions
 countElement :: Polymer -> Element -> (Int, Polymer)
 countElement [] _ = (0, [])
 countElement (a:rest) e
@@ -176,7 +146,7 @@ solveHelperPat i (p, r) = growRepeatedly (p, patternsFromRules r) i
 -- Solve Results
 firstResult :: (Polymer, [PairRule]) -> Int
 firstResult input = snd minmax - fst minmax
-  where p = uncurry (runPolymerSteps 10) input
+  where p = fst $ solveHelperPat 10 input
         minmax = extremeQuantities p
 
 firstDisplay :: Int -> String
@@ -187,7 +157,7 @@ firstSolve input = firstDisplay $ firstResult input
 
 secondResult :: (Polymer, [PairRule]) -> Int
 secondResult input = snd minmax - fst minmax
-  where p = uncurry (runPolymerSteps 40) input
+  where p = fst $ solveHelperPat 40 input
         minmax = extremeQuantities p
 
 secondDisplay :: Int -> String
