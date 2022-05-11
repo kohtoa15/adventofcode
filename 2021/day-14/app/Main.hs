@@ -64,25 +64,28 @@ readInput :: String -> Maybe (Polymer, [PairRule])
 readInput s = readInputLines $ lines s
 
 
--- Solve helpers
-countElem :: Element -> Polymer -> Int
-countElem e [] = 0
-countElem e (p:rest)
-    | e == p = 1 + countElem e rest
-    | otherwise = 0 + countElem e rest
+-- Polymer progression functions
+countElement :: Polymer -> Element -> (Int, Polymer)
+countElement [] _ = (0, [])
+countElement (a:rest) e
+    | a == e = (fst res + 1, snd res)
+    | otherwise = (0, a:rest)
+  where res = countElement rest e
 
-elementQuantityInt :: Polymer -> [Element] -> [Int]
-elementQuantityInt _ [] = []
-elementQuantityInt polymer unique = countElem e polymer : elementQuantityInt polymer (tail unique)
-  where e = head unique
-
-elementQuantities :: Polymer -> [Int]
-elementQuantities p = elementQuantityInt p (nub p)
+elementQuantities :: Polymer -> [(Element, Int)]
+elementQuantities [] = []
+elementQuantities p = (e, count) : elementQuantities rest
+  where e = head p
+        t = countElement p e
+        count = fst t
+        rest = snd t
 
 extremeQuantities :: Polymer -> (Int, Int)
-extremeQuantities p = (head sorted, last sorted)
-  where sorted = sort $ elementQuantities p
+extremeQuantities p = (head qs, last qs)
+  where qs = sort $ map snd $ elementQuantities $ sort p
 
+
+-- Solve Results
 firstResult :: (Polymer, [PairRule]) -> Int
 firstResult input = snd minmax - fst minmax
   where p = uncurry (runPolymerSteps 10) input
