@@ -10,30 +10,31 @@ import Data.Maybe (isJust, fromJust)
 type Element = Char
 type Polymer = String
 
-type PairRule = ((Char, Char), Char)
-
-readPairRule :: String -> Maybe PairRule
+readPairRule :: String -> Maybe (String, String)
 readPairRule s
-    | l == 2 && length ab == 2 && length c == 1 = Just ((a, b), head c)
+    | l == 2 && length key == 2 && length insert == 1 = Just (key, val)
     | otherwise = Nothing
   where parts = splitOn " -> " s
         l = length parts
-        ab = head parts
-        a = head ab
-        b = last ab
-        c = last parts
+        key = head parts -- start pattern is the two pair chars
+        insert = last parts
+        val = [head key] ++ insert ++ [last key]  -- resulting pattern is with the resulting char in the middle
+
+patternsFromRules :: [(String, String)] -> PatternSet
+patternsFromRules [] = HM.empty
+patternsFromRules ((key, val):rs) = patternInsert key val (patternsFromRules rs)
 
 -- Read Input helpers
-readInputLines :: [String] -> Maybe (Polymer, [PairRule])
+readInputLines :: [String] -> Maybe PolymerInfo
 readInputLines ls
-    | empty == "" && isJust rules = Just (template, fromJust rules)
+    | empty == "" && isJust rules = Just (template, patternsFromRules $ fromJust rules)
     | otherwise   = Nothing
   where template = head ls
         empty = head $ tail ls
         rest = tail $ tail ls
         rules = mapM readPairRule rest
 
-readInput :: String -> Maybe (Polymer, [PairRule])
+readInput :: String -> Maybe PolymerInfo
 readInput s = readInputLines $ lines s
 
 
@@ -91,18 +92,6 @@ subsetLookup p (List l) = subsetListLookup p l
 patternLookup :: Polymer -> PatternSet -> Maybe Polymer
 patternLookup k s = subsetLookup k =<< HM.lookup (length k) s
 
-patternsFromRules :: [PairRule] -> PatternSet
-patternsFromRules [] = HM.empty
-patternsFromRules (r:rs) = patternInsert key val (patternsFromRules rs)
-  where key = [a, b] -- start pattern is the two pair chars
-        val = [a, c, b]  -- resulting pattern is with the resulting char in the middle
-        a = fst $ fst r
-        b = snd $ fst r
-        c = snd r
-
-polymerInfo :: (Polymer, [PairRule]) -> PolymerInfo
-polymerInfo (p,r) = (p, patternsFromRules r)
-
 -- tries to apply the patterns to the polymer and returns the result without updating the patterns
 applyPatternSet :: Polymer -> PatternSet -> Polymer
 applyPatternSet p pat
@@ -139,34 +128,30 @@ growRepeatedly :: PolymerInfo -> Int -> PolymerInfo
 growRepeatedly p 0 = p
 growRepeatedly p x = growRepeatedly (growPolymer p) (x - 1)
 
-solveHelperPat :: Int -> (Polymer, [PairRule]) -> PolymerInfo
-solveHelperPat i (p, r) = growRepeatedly (p, patternsFromRules r) i
-
-
 -- Solve Results
-firstResult :: (Polymer, [PairRule]) -> Int
+firstResult :: PolymerInfo -> Int
 firstResult input = snd minmax - fst minmax
-  where p = fst $ solveHelperPat 10 input
+  where p = fst $ growRepeatedly input 10
         minmax = extremeQuantities p
 
 firstDisplay :: Int -> String
 firstDisplay num = "Part One: What do you get if you take the quantity of the most common element and subtract the quantity of the least common element? - " ++ show num
 
-firstSolve :: (Polymer, [PairRule]) -> String
+firstSolve :: PolymerInfo -> String
 firstSolve input = firstDisplay $ firstResult input
 
-secondResult :: (Polymer, [PairRule]) -> Int
+secondResult :: PolymerInfo -> Int
 secondResult input = snd minmax - fst minmax
-  where p = fst $ solveHelperPat 40 input
+  where p = fst $ growRepeatedly input 20
         minmax = extremeQuantities p
 
 secondDisplay :: Int -> String
 secondDisplay num = "Part Two: What do you get if you take the quantity of the most common element and subtract the quantity of the least common element? - " ++ show num
 
-secondSolve :: (Polymer, [PairRule]) -> String
+secondSolve :: PolymerInfo -> String
 secondSolve input = secondDisplay $ secondResult input
 
-processBoth :: (Polymer, [PairRule]) -> String
+processBoth :: PolymerInfo -> String
 processBoth input = firstSolve input ++ "\n\n" ++ secondSolve input
 
 solve :: String -> String
