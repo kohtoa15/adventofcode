@@ -245,7 +245,7 @@ fn test_packet_version4() {
 fn main() -> std::io::Result<()> {
     let filename = std::env::args().skip(1).next().unwrap_or("input".to_string());
     let input = std::fs::read_to_string(filename)?;
-    let input_data = read_hex_data(input)
+    let input_data = read_hex_data(input.lines().next().unwrap().to_string())
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("could not parse input as hex number: {}", e)))?;
 
     let mut offset: usize = 0;
