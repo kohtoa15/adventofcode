@@ -278,32 +278,84 @@ impl TryFrom<(&mut usize, &[u8])> for Packet {
 }
 
 #[cfg(test)]
-fn test_packet_version(input: String) -> u32 {
+fn packet_test(input: String) -> Packet {
     let len = input.len();
+    println!("input ({}): {}", input.len(), &input);
     let data = read_hex_data(input).expect("unable to read hex data from input");
+    println!("hex data ({}): {}", data.len(), data.iter().map(|b| format!("{:08b}", b)).collect::<Vec<String>>().join(", "));
     let mut offset = data.len() * 8 - len * 4;
     let packet = Packet::try_from((&mut offset, data.as_slice())).expect("unable to convert data to packet");
-    return packet.get_version_sum();
+    return packet;
+}
+
+#[cfg(test)]
+fn test_packet_version(input: &str) -> u32 {
+    packet_test(input.to_string()).get_version_sum()
 }
 
 #[test]
 fn test_packet_version1() {
-    assert_eq!(test_packet_version("8A004A801A8002F478".to_string()), 16);
+    assert_eq!(test_packet_version("8A004A801A8002F478"), 16);
 }
 
 #[test]
 fn test_packet_version2() {
-    assert_eq!(test_packet_version("620080001611562C8802118E34".to_string()), 12);
+    assert_eq!(test_packet_version("620080001611562C8802118E34"), 12);
 }
 
 #[test]
 fn test_packet_version3() {
-    assert_eq!(test_packet_version("C0015000016115A2E0802F182340".to_string()), 23);
+    assert_eq!(test_packet_version("C0015000016115A2E0802F182340"), 23);
 }
 
 #[test]
 fn test_packet_version4() {
-    assert_eq!(test_packet_version("A0016C880162017C3686B18A3D4780".to_string()), 31);
+    assert_eq!(test_packet_version("A0016C880162017C3686B18A3D4780"), 31);
+}
+
+#[cfg(test)]
+fn test_packet_value(input: &str) -> u64 {
+    packet_test(input.to_string()).get_value()
+}
+
+#[test]
+fn test_packet_value1() {
+    assert_eq!(test_packet_value("C200B40A82"), 3);
+}
+
+#[test]
+fn test_packet_value2() {
+    assert_eq!(test_packet_value("04005AC33890"), 54);
+}
+
+#[test]
+fn test_packet_value3() {
+    assert_eq!(test_packet_value("880086C3E88112"), 7);
+}
+
+#[test]
+fn test_packet_value4() {
+    assert_eq!(test_packet_value("CE00C43D881120"), 9);
+}
+
+#[test]
+fn test_packet_value5() {
+    assert_eq!(test_packet_value("D8005AC2A8F0"), 1);
+}
+
+#[test]
+fn test_packet_value6() {
+    assert_eq!(test_packet_value("F600BC2D8F"), 0);
+}
+
+#[test]
+fn test_packet_value7() {
+    assert_eq!(test_packet_value("9C005AC2F8F0"), 0);
+}
+
+#[test]
+fn test_packet_value8() {
+    assert_eq!(test_packet_value("9C0141080250320F1802104A08"), 1);
 }
 
 fn main() -> std::io::Result<()> {
