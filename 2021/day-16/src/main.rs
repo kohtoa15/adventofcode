@@ -310,11 +310,14 @@ fn test_packet_version4() {
 
 fn main() -> std::io::Result<()> {
     let filename = std::env::args().skip(1).next().unwrap_or("input".to_string());
-    let input = std::fs::read_to_string(filename)?;
-    let input_data = read_hex_data(input.lines().next().unwrap().to_string())
+    let input = std::fs::read_to_string(filename)?.lines().next().unwrap().to_string();
+    let len = input.len();
+    let input_data = read_hex_data(input)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("could not parse input as hex number: {}", e)))?;
 
-    let mut offset: usize = 0;
+    // calculate initial offset from bitlength of total data input - bitlength of input data
+    // this results in the offset starting at the byte padding overhang
+    let mut offset: usize = input_data.len() * 8 - len * 4;
     let top_packet = Packet::try_from((&mut offset, input_data.as_slice()))?;
     println!("a. Combined sum of all version numbers: {}", top_packet.get_version_sum());
     println!("b. Evaluated expression of BITS transmission: {}", top_packet.get_value());
