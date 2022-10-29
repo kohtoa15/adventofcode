@@ -119,9 +119,37 @@ trait HierarchicalVersion {
     fn get_version_sum(&self) -> u32;
 }
 
+enum Op {
+    Sum,
+    Product,
+    Minimum,
+    Maximum,
+    GreaterThan,
+    LessThan,
+    Equal,
+}
+
+impl TryFrom<u8> for Op {
+    type Error = std::io::Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Op::Sum),
+            1 => Ok(Op::Product),
+            2 => Ok(Op::Minimum),
+            3 => Ok(Op::Maximum),
+            5 => Ok(Op::GreaterThan),
+            6 => Ok(Op::LessThan),
+            7 => Ok(Op::Equal),
+            // invalid type
+            _ => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid type for Operation")),
+        }       
+    }
+}
+
 enum PacketType {
     Literal(u64),
-    Operator(Vec<Packet>),
+    Operator(Op, Vec<Packet>),
 }
 
 impl HierarchicalVersion for PacketType {
@@ -130,7 +158,7 @@ impl HierarchicalVersion for PacketType {
             // no version defined within literal value
             Self::Literal(_) => 0,
             // sum up versions of all subpackets
-            Self::Operator(subpackets) => subpackets.iter().map(|p| p.get_version_sum()).sum(),
+            Self::Operator(_, subpackets) => subpackets.iter().map(|p| p.get_version_sum()).sum(),
         }
     }
 }
@@ -155,6 +183,7 @@ impl TryFrom<(&mut usize, &[u8])> for PacketType {
             Ok(Self::Literal(value))
         } else {
             // operator value with subpackets
+            let op = Op::try_from(ptype)?;
             let length_type_id = poll_bits_increase_offset(data, offset, 1);
             let mut subpackets = Vec::new();
             if length_type_id == 0 {
@@ -183,7 +212,7 @@ impl TryFrom<(&mut usize, &[u8])> for PacketType {
                     *offset = sub_offset;
                 }
             }
-            Ok(Self::Operator(subpackets))
+            Ok(Self::Operator(op, subpackets))
         }
     }
 }
