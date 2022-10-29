@@ -279,6 +279,7 @@ impl TryFrom<(&mut usize, &[u8])> for Packet {
     }
 }
 
+#[cfg(test)]
 fn test_packet_version(input: String) -> u32 {
     let len = input.len();
     let data = read_hex_data(input).expect("unable to read hex data from input");
