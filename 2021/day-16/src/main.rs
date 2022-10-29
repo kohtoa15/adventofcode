@@ -119,6 +119,10 @@ trait HierarchicalVersion {
     fn get_version_sum(&self) -> u32;
 }
 
+trait PacketValue {
+    fn get_value(&self) -> u64;
+}
+
 enum Op {
     Sum,
     Product,
@@ -147,6 +151,20 @@ impl TryFrom<u8> for Op {
     }
 }
 
+impl Op {
+    pub fn apply(&self, values: &[u64]) -> u64 {
+        match self {
+            Self::Sum           => values.iter().sum(),
+            Self::Product       => values.iter().product(),
+            Self::Minimum       => values.iter().min().map(|n| *n).unwrap_or(0),
+            Self::Maximum       => values.iter().max().map(|n| *n).unwrap_or(0),
+            Self::GreaterThan   => if values[0] > values[1] { 1 } else { 0 },
+            Self::LessThan      => if values[0] < values[1] { 1 } else { 0 },
+            Self::Equal         => if values[0] == values[1] { 1 } else { 0 },
+        }
+    }
+}
+
 enum PacketType {
     Literal(u64),
     Operator(Op, Vec<Packet>),
@@ -159,6 +177,18 @@ impl HierarchicalVersion for PacketType {
             Self::Literal(_) => 0,
             // sum up versions of all subpackets
             Self::Operator(_, subpackets) => subpackets.iter().map(|p| p.get_version_sum()).sum(),
+        }
+    }
+}
+
+impl PacketValue for PacketType {
+    fn get_value(&self) -> u64 {
+        match self {
+            Self::Literal(n) => *n,
+            Self::Operator(op, packets) => {
+                let vals: Vec<u64> = packets.iter().map(|p| p.get_value()).collect();
+                op.apply(&vals)
+            },
         }
     }
 }
@@ -228,6 +258,12 @@ impl HierarchicalVersion for Packet {
     }
 }
 
+impl PacketValue for Packet {
+    fn get_value(&self) -> u64 {
+        return self.packet_type.get_value();
+    }
+}
+
 impl TryFrom<(&mut usize, &[u8])> for Packet {
     type Error = std::io::Error;
 
@@ -280,6 +316,7 @@ fn main() -> std::io::Result<()> {
     let mut offset: usize = 0;
     let top_packet = Packet::try_from((&mut offset, input_data.as_slice()))?;
     println!("a. Combined sum of all version numbers: {}", top_packet.get_version_sum());
+    println!("b. Evaluated expression of BITS transmission: {}", top_packet.get_value());
 
     Ok(())
 }
