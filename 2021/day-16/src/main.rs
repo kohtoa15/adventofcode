@@ -2,25 +2,23 @@ use std::num::ParseIntError;
 
 
 fn read_hex_data(input: String) -> Result<Vec<u8>, ParseIntError> {
-    let mut remainder_byte = None;
     let mut data = Vec::with_capacity(input.len() / 2);
-    for b in input.into_bytes() {
-        match remainder_byte.take() {
-            Some(a) => {
-                // use two bytes as hexadecimal num
-                data.push(u8::from_str_radix(format!("{}{}", a as char, b as char).as_str(), 16).unwrap());
-            },
-            // wait for next byte
-            None => {
-                let _ = remainder_byte.replace(b);
-            },
-        }
+    let mut pos = 2;
+    while pos <= input.len() {
+        let start = pos - 2;
+        let substr = &input[start..pos];
+        let num = u8::from_str_radix(substr, 16)?;
+        data.push(num);
+        pos += 2;
     }
     // if remainder stays, push it as half filled u8
-    if let Some(b) = remainder_byte.take() {
-        data.push(u8::from_str_radix(format!("{}{}", b as char, '0').as_str(), 16).unwrap());
+    if pos == (input.len() + 1) {
+        let start = pos - 2;
+        let substr = &input[start..input.len()];
+        let num = u8::from_str_radix(substr, 16)?;
+        // left shift single hex digit value
+        data.push(num << 4);
     }
-
     Ok(data)
 }
 
