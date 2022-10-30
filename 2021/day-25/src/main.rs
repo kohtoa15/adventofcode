@@ -1,4 +1,6 @@
-use std::{cell::Cell, collections::HashMap};
+use std::{collections::HashMap, sync::{atomic::{AtomicBool, Ordering}, Arc, RwLock}};
+
+use tokio::task::JoinSet;
 
 enum Direction {
     East, South,
@@ -17,29 +19,29 @@ struct SeaCucumber {
     pub x: u32,
     pub y: u32,
     pub facing: Direction,
-    pub is_moving: Cell<bool>,
+    pub is_moving: AtomicBool,
 }
 
 impl SeaCucumber {
     pub fn new(x: u32, y: u32, facing: Direction) -> Self {
-        Self { x, y, facing, is_moving: Cell::from(false) }
+        Self { x, y, facing, is_moving: AtomicBool::new(false) }
     }
 
     pub fn try_to_move(&self, state: &SeaCucumberState) -> bool {
-        let _ = self.is_moving.take(); // set false by default
+        self.is_moving.store(false, Ordering::SeqCst);  // set false by default
         let delta = self.facing.get_delta();
         let dx = self.x + delta.0;
         let dy = self.y + delta.1;
         if state.is_empty(dx, dy) {
-            let _ = self.is_moving.replace(true);
+            self.is_moving.store(true, Ordering::SeqCst)
         }
         // report back move outcome
-        return self.is_moving.get();
+        return self.is_moving.load(Ordering::SeqCst);
     }
 
     // Moves SeaCucumber if it has the is_moving flag set
     pub fn move_cucumber(&mut self) {
-        if self.is_moving.take() {
+        if self.is_moving.load(Ordering::SeqCst) {
             let delta = self.facing.get_delta();
             self.x += delta.0;
             self.y += delta.1;
@@ -47,9 +49,10 @@ impl SeaCucumber {
     }
 }
 
+#[derive(Clone)]
 struct SeaCucumberState {
-    herd_east: Vec<SeaCucumber>,
-    herd_south: Vec<SeaCucumber>,
+    herd_east: Arc<Vec<Arc<RwLock<SeaCucumber>>>>,
+    herd_south: Arc<Vec<Arc<RwLock<SeaCucumber>>>>,
     width: u32,
     height: u32,
 }
@@ -59,8 +62,9 @@ impl SeaCucumberState {
         (x % self.width, y % self.height)
     }
 
-    fn any_cucumber_on_position(&self, cucumbers: &Vec<SeaCucumber>, position: (u32, u32)) -> bool {
+    fn any_cucumber_on_position(&self, cucumbers: &Vec<Arc<RwLock<SeaCucumber>>>, position: (u32, u32)) -> bool {
         cucumbers.iter().any(|c| {
+            let c = c.read().unwrap();
             let (cx, cy) = self.normalize_position(c.x, c.y);
             cx == position.0 && cy == position.1
         }) 
@@ -80,41 +84,64 @@ impl SeaCucumberState {
         true
     }
 
-    fn check_cucumber_moves(&self, cucumbers: &Vec<SeaCucumber>) -> u32 {
-        let mut total_moves = 0;
+    async fn check_cucumber_moves(&self, cucumbers: &Vec<Arc<RwLock<SeaCucumber>>>) -> u32 {
+        let mut set = JoinSet::new();
         for c in cucumbers.iter() {
-            if c.try_to_move(&self) {
-                total_moves += 1;
-            }
+            let sc = c.clone();
+            let state = self.clone();
+            set.spawn(async move {
+                let read = sc.read().unwrap();
+                if read.try_to_move(&state) {
+                    1
+                } else {
+                    0
+                }
+            });
+        }
+        let mut total_moves = 0;
+        while let Some(res) = set.join_next().await {
+            total_moves += res.unwrap();
         }
         return total_moves;
     }
 
     // Returns the number of moves
-    pub fn move_all_easterners(&mut self) -> u32 {
-        let ret = self.check_cucumber_moves(&self.herd_east);
+    pub async fn move_all_easterners(&mut self) -> u32 {
+        let ret = self.check_cucumber_moves(self.herd_east.as_ref()).await;
         if ret > 0 {
-            for c in self.herd_east.iter_mut() {
-                c.move_cucumber();
+            let mut set = JoinSet::new();
+            for c in self.herd_east.iter() {
+                let sc = c.clone();
+                set.spawn(async move {
+                    let mut w = sc.write().unwrap();
+                    w.move_cucumber();
+                });
             }
+            while let Some(_) = set.join_next().await {}
         }
         return ret;
     }
 
     // Returns the number of moves
-    pub fn move_all_southerners(&mut self) -> u32 {
-        let ret = self.check_cucumber_moves(&self.herd_south);
+    pub async fn move_all_southerners(&mut self) -> u32 {
+        let ret = self.check_cucumber_moves(&self.herd_south).await;
         if ret > 0 {
-            for c in self.herd_south.iter_mut() {
-                c.move_cucumber();
+            let mut set = JoinSet::new();
+            for c in self.herd_south.iter() {
+                let sc = c.clone();
+                set.spawn(async move {
+                    let mut w = sc.write().unwrap();
+                    w.move_cucumber();
+                });
             }
+            while let Some(_) = set.join_next().await {}
         }
         return ret;
     }
 
-    pub fn move_one_step(&mut self) -> u32 {
-        let n = self.move_all_easterners();
-        let m = self.move_all_southerners();
+    pub async fn move_one_step(&mut self) -> u32 {
+        let n = self.move_all_easterners().await;
+        let m = self.move_all_southerners().await;
         return n + m;
     }
 }
@@ -166,12 +193,12 @@ impl TryFrom<Grid> for SeaCucumberState {
         use std::io::Error;
         use std::io::ErrorKind;
         Ok(SeaCucumberState {
-            herd_east: grid.tracked_tokens.get(&'>')
+            herd_east: Arc::new(grid.tracked_tokens.get(&'>')
                 .ok_or(Error::new(ErrorKind::InvalidData, "grid has no east cucumbers"))?
-                .into_iter().map(|(x, y)| SeaCucumber::new(*x, *y, Direction::East)).collect(),
-            herd_south: grid.tracked_tokens.get(&'v')
+                .into_iter().map(|(x, y)| Arc::new(RwLock::new(SeaCucumber::new(*x, *y, Direction::East)))).collect()),
+            herd_south: Arc::new(grid.tracked_tokens.get(&'v')
                 .ok_or(Error::new(ErrorKind::InvalidData, "grid has no south cucumbers"))?
-                .into_iter().map(|(x, y)| SeaCucumber::new(*x, *y, Direction::South)).collect(),
+                .into_iter().map(|(x, y)| Arc::new(RwLock::new(SeaCucumber::new(*x, *y, Direction::South)))).collect()),
             width: grid.width
                 .ok_or(Error::new(ErrorKind::InvalidInput, "grid has no width"))?,
             height: grid.height
@@ -180,7 +207,8 @@ impl TryFrom<Grid> for SeaCucumberState {
     }
 }
 
-fn main() -> std::io::Result<()> {
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
     let filename = std::env::args().skip(1).next().unwrap_or("input".to_string());
     let content = std::fs::read_to_string(filename)?;
     println!("file imported.");
@@ -192,7 +220,7 @@ fn main() -> std::io::Result<()> {
     let mut steps = 0;
     loop {
         steps += 1;
-        let moves = cucumber_state.move_one_step();
+        let moves = cucumber_state.move_one_step().await;
         println!("step {}: {} moves", steps, moves);
         if moves == 0 {
             // step without any moves
