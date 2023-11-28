@@ -26,8 +26,8 @@ day-*/dist
 day-*/dist-*
 
 # Rust
-day-*/target
-day-*/Cargo.lock
+**/day-*/target/
+**/day-*/Cargo.lock
 
 # C
 a.out*
