@@ -5,7 +5,7 @@
 #define ERR_INVALID_INPUT 42
 #define ERR_MEM 69
 
-#define DEBUG
+// #define DEBUG
 #ifdef DEBUG
 #define DEBUG_PRINT(x) printf x
 #else
@@ -86,6 +86,106 @@ size_t TranslateMapping(size_t src, size_t* mappings, size_t start, size_t end) 
 	return src;
 	}
 
+size_t SeedToLocation(size_t seed, size_t* list, size_t* end_markers) {
+	size_t val = seed;
+	for (size_t i = 0; i < 7; i++) {
+		size_t start = i == 0 ? 0 : end_markers[i-1];
+		val = TranslateMapping(val, list, start, end_markers[i]);
+		}
+	return val;
+	}
+
+struct tuple_t {
+	size_t value;
+	size_t offset;
+	};
+
+struct tuple_t TranslateMappingFastRange(size_t src, size_t range, size_t* mappings, size_t start, size_t end) {
+	struct tuple_t tuple;
+	size_t next_translation = -1;
+	for (size_t i = start; i < end; i+=3) {
+		struct range_mapping_t* mapping = (struct range_mapping_t*)(mappings + i);
+		long diff = (long)src - (long)mapping->src_range_start;
+		if (diff >= 0 && diff < (long)mapping->range_length) {
+			long used_range = (long)mapping->range_length - diff;
+			tuple.value = mapping->dest_range_start + diff;
+			tuple.offset = used_range >= range ? 0 : used_range;
+			return tuple;
+			}
+		if (diff < 0) {
+			size_t away = (size_t)-diff;
+			if (away < next_translation)
+				next_translation = away;
+			}
+		}
+
+	tuple.value = src;
+	tuple.offset = next_translation >= range ? 0 : next_translation;
+	return tuple;
+	}
+
+size_t SeedToLocationFastRange(size_t seed, size_t range, size_t* list, size_t* end_markers) {
+	size_t* in = malloc(1024 * 1024);
+	size_t* out = malloc(1024 * 1024);
+	size_t num_out = 0;
+	size_t num_in = 2;
+	in[0] = seed;
+	in[1] = range;
+
+	for (size_t i = 0; i < 7; i++) {
+		size_t start = i == 0 ? 0 : end_markers[i-1];
+		num_out = 0;
+		for (size_t k = 0; k < num_in; k+=2) {
+			size_t src = in[k];
+			size_t range = in[k+1];
+
+			printf("%lu..%lu, ", src, src + range - 1);
+			struct tuple_t res = TranslateMappingFastRange(src, range, list, start, end_markers[i]);
+			out[num_out++] = res.value;
+			out[num_out++] = res.offset > 0 ? res.offset : range;
+			if (res.offset > 0) {
+				DEBUG_PRINT(("split range at offset %lu\n", res.offset));
+				in[num_in++] = src + res.offset;
+				in[num_in++] = range - res.offset;
+				}
+			}
+		printf("\n");
+		DEBUG_PRINT(("tr%lu: in=%lu, out=%lu\n", i, num_in, num_out));
+		// swap stacks
+		in = out;
+		num_in = num_out;
+		}
+
+	size_t val = -1;
+	for (size_t i = 0; i < num_in; i+=2) {
+		if (in[i] < val)
+			val = in[i];
+		}
+	return val;
+	}
+
+int ReadRanges(struct num_vec_t* mappings, size_t* end_markers, char** magic_words, size_t num_ranges, FILE* f) {
+	for (size_t i = 0; i < num_ranges; i++) {
+		if (ReadMagicWord(magic_words[i], f) != 0)
+			return ERR_INVALID_INPUT;
+		int ret = ReadRangeMapArray(mappings, f);
+		if (ret != 0)
+			return ret;
+		end_markers[i] = mappings->len;
+		}
+	return 0;
+}
+
+char* MAGIC_WORDS[] = {
+	"seed-to-soil map:\n",
+	"soil-to-fertilizer map:\n",
+	"fertilizer-to-water map:\n",
+	"water-to-light map:\n",
+	"light-to-temperature map:\n",
+	"temperature-to-humidity map:\n",
+	"humidity-to-location map:\n"
+};
+
 int main(void) {
 	FILE* f = fopen("input.txt", "r");
 	if (f == NULL) {
@@ -102,70 +202,16 @@ int main(void) {
 		seed_index++;
 		}
 
-	// DEBUG
-	for (size_t i = 0; i < seed_index; i++) {
-		DEBUG_PRINT(("seed %lu: %lu\n", i, seeds[i]));
-		}
-
 	struct num_vec_t mappings;
 	mappings.list = NULL;
-	int ret;
 
-	if (ReadMagicWord("seed-to-soil map:\n", f) != 0)
-		return ERR_INVALID_INPUT;
-	if ((ret = ReadRangeMapArray(&mappings, f)) != 0) {
+	size_t end_markers[7];
+	int ret = ReadRanges(&mappings, end_markers, (char**)MAGIC_WORDS, 7, f);
+	if (ret != 0) {
+		if (mappings.list != NULL)
+			free(mappings.list);
 		return ret;
 		}
-	size_t seed_to_soil_end = mappings.len;
-	DEBUG_PRINT(("end of seed-to-soil: %lu\n", seed_to_soil_end));
-
-	if (ReadMagicWord("soil-to-fertilizer map:\n", f) != 0)
-		return ERR_INVALID_INPUT;
-	if ((ret = ReadRangeMapArray(&mappings, f)) != 0) {
-		return ret;
-		}
-	size_t soil_to_fert_end = mappings.len;
-	DEBUG_PRINT(("end of soil-to-fertilizer: %lu\n", soil_to_fert_end));
-
-	if (ReadMagicWord("fertilizer-to-water map:\n", f) != 0)
-		return ERR_INVALID_INPUT;
-	if ((ret = ReadRangeMapArray(&mappings, f)) != 0) {
-		return ret;
-		}
-	size_t fertilizer_to_water_end = mappings.len;
-	DEBUG_PRINT(("end of fertilizer-to-water: %lu\n", fertilizer_to_water_end));
-
-	if (ReadMagicWord("water-to-light map:\n", f) != 0)
-		return ERR_INVALID_INPUT;
-	if ((ret = ReadRangeMapArray(&mappings, f)) != 0) {
-		return ret;
-		}
-	size_t water_to_light_end = mappings.len;
-	DEBUG_PRINT(("end of water-to-light: %lu\n", water_to_light_end));
-
-	if (ReadMagicWord("light-to-temperature map:\n", f) != 0)
-		return ERR_INVALID_INPUT;
-	if ((ret = ReadRangeMapArray(&mappings, f)) != 0) {
-		return ret;
-		}
-	size_t light_to_temperature_end = mappings.len;
-	DEBUG_PRINT(("end of light-to-temperature: %lu\n", light_to_temperature_end));
-
-	if (ReadMagicWord("temperature-to-humidity map:\n", f) != 0)
-		return ERR_INVALID_INPUT;
-	if ((ret = ReadRangeMapArray(&mappings, f)) != 0) {
-		return ret;
-		}
-	size_t temperature_to_humidity_end = mappings.len;
-	DEBUG_PRINT(("end of temperature-to-humidity: %lu\n", temperature_to_humidity_end));
-
-	if (ReadMagicWord("humidity-to-location map:\n", f) != 0)
-		return ERR_INVALID_INPUT;
-	if ((ret = ReadRangeMapArray(&mappings, f)) != 0) {
-		return ret;
-		}
-	size_t humidity_to_location_end = mappings.len;
-	DEBUG_PRINT(("end of humidity-to-location: %lu\n", humidity_to_location_end));
 	fclose(f);
 
 	printf("Hello, I'm the almanac!\n");
@@ -173,32 +219,30 @@ int main(void) {
 	for (size_t i = 0; i < seed_index; i++) {
 		size_t seed = seeds[i];
 		DEBUG_PRINT(("seed %lu: %lu\n", i, seed));
-		// seed to soil
-		size_t soil = TranslateMapping(seed, mappings.list, 0, seed_to_soil_end);
-		DEBUG_PRINT(("\tseed %lu => soil %lu\n", seed, soil));
-		// soil to fertilizer
-		size_t fert = TranslateMapping(soil, mappings.list, seed_to_soil_end, soil_to_fert_end);
-		DEBUG_PRINT(("\tsoil %lu => fertilizer %lu\n", soil, fert));
-		// fertilizer to water
-		size_t water = TranslateMapping(fert, mappings.list, soil_to_fert_end, fertilizer_to_water_end);
-		DEBUG_PRINT(("\tfertilizer %lu => water %lu\n", fert, water));
-		// water to light
-		size_t light = TranslateMapping(water, mappings.list, fertilizer_to_water_end, water_to_light_end);
-		DEBUG_PRINT(("\twater %lu => light %lu\n", water, light));
-		// light to temperature
-		size_t temp = TranslateMapping(light, mappings.list, water_to_light_end, light_to_temperature_end);
-		DEBUG_PRINT(("\tlight %lu => temperature %lu\n", light, temp));
-		// temperature to humidity
-		size_t humi = TranslateMapping(temp, mappings.list, light_to_temperature_end, temperature_to_humidity_end);
-		DEBUG_PRINT(("\ttemperature %lu => humidity %lu\n", temp, humi));
-		// humidity to location
-		size_t locn = TranslateMapping(humi, mappings.list, temperature_to_humidity_end, humidity_to_location_end);
-		DEBUG_PRINT(("\thumidity %lu => location %lu\n", humi, locn));
+		size_t locn = SeedToLocation(seed, mappings.list, end_markers);
 		printf("seed %lu => location %lu\n", seed, locn);
 		if (locn < low_locn)
 			low_locn = locn;
 		}
 	printf("Lowest Location Number = %lu\n", low_locn);
+
+ 	size_t low_locn_ranged = -1;
+ 	for (size_t i = 0; i < seed_index; i+=2) {
+ 		size_t seed = seeds[i];
+ 		size_t seed_range = seeds[i+1];
+		printf("seed %lu, range %lu\n", seed, seed_range);
+		size_t locn = SeedToLocationFastRange(seed, seed_range, mappings.list, end_markers);
+		printf("seed %lu => location %lu\n", seed, locn);
+ 		if (locn < low_locn_ranged)
+			low_locn_ranged = locn;
+		// for (size_t k = 0; k < seed_range; k++) {
+		// 	printf("seed+k=%lu\n", seed + k);
+ 		// 	size_t locn = SeedToLocation(seed + k, mappings.list, end_markers);
+ 		// 	if (locn < low_locn_ranged)
+ 		// 		low_locn_ranged = locn;
+ 		// 	}
+ 		}
+	printf("Lowest Location Number (from ranges) = %lu\n", low_locn_ranged);
 
 	return 0;
 	}
