@@ -125,41 +125,35 @@ struct tuple_t TranslateMappingFastRange(size_t src, size_t range, size_t* mappi
 	}
 
 size_t SeedToLocationFastRange(size_t seed, size_t range, size_t* list, size_t* end_markers) {
-	size_t* in = malloc(1024 * 1024);
-	size_t* out = malloc(1024 * 1024);
-	size_t num_out = 0;
+	size_t inputs[1024];
 	size_t num_in = 2;
-	in[0] = seed;
-	in[1] = range;
+	inputs[0] = seed;
+	inputs[1] = range;
 
 	for (size_t i = 0; i < 7; i++) {
 		size_t start = i == 0 ? 0 : end_markers[i-1];
-		num_out = 0;
+
 		for (size_t k = 0; k < num_in; k+=2) {
-			size_t src = in[k];
-			size_t range = in[k+1];
+			size_t src = inputs[k];
+			size_t range = inputs[k+1];
 
 			printf("%lu..%lu, ", src, src + range - 1);
 			struct tuple_t res = TranslateMappingFastRange(src, range, list, start, end_markers[i]);
-			out[num_out++] = res.value;
-			out[num_out++] = res.offset > 0 ? res.offset : range;
+			inputs[k] = res.value;
+			inputs[k+1] = res.offset > 0 ? res.offset : range;
 			if (res.offset > 0) {
 				DEBUG_PRINT(("split range at offset %lu\n", res.offset));
-				in[num_in++] = src + res.offset;
-				in[num_in++] = range - res.offset;
+				inputs[num_in++] = src + res.offset;
+				inputs[num_in++] = range - res.offset;
 				}
 			}
 		printf("\n");
-		DEBUG_PRINT(("tr%lu: in=%lu, out=%lu\n", i, num_in, num_out));
-		// swap stacks
-		in = out;
-		num_in = num_out;
 		}
 
 	size_t val = -1;
 	for (size_t i = 0; i < num_in; i+=2) {
-		if (in[i] < val)
-			val = in[i];
+		if (inputs[i] < val)
+			val = inputs[i];
 		}
 	return val;
 	}
@@ -235,14 +229,9 @@ int main(void) {
 		printf("seed %lu => location %lu\n", seed, locn);
  		if (locn < low_locn_ranged)
 			low_locn_ranged = locn;
-		// for (size_t k = 0; k < seed_range; k++) {
-		// 	printf("seed+k=%lu\n", seed + k);
- 		// 	size_t locn = SeedToLocation(seed + k, mappings.list, end_markers);
- 		// 	if (locn < low_locn_ranged)
- 		// 		low_locn_ranged = locn;
- 		// 	}
  		}
 	printf("Lowest Location Number (from ranges) = %lu\n", low_locn_ranged);
-
+	
+	free(mappings.list);
 	return 0;
 	}
